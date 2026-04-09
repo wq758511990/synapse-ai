@@ -1,9 +1,13 @@
-import { SendHorizontal, ChevronDown, ChevronRight, CircleStop } from 'lucide-react';
-import { marked } from 'marked';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { SendHorizontal, CircleStop } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LLMConfig } from '../../services/llmService';
-import { useSynapseStore, WorkflowStep } from '../../store/useSynapseStore';
+import { getObsidianService } from '../../services/serviceContainer';
+import { useSynapseStore } from '../../store/useSynapseStore';
 import { runChatWorkflow } from '../../workflow/chatGraph';
+import { cssVar } from '../cssUtils';
+import { AssistantMessage } from './AssistantMessage';
+import { EmptyState } from './EmptyState';
+import { WorkflowStepItem } from './WorkflowStepItem';
 
 const LLM_CONFIG: LLMConfig = {
 	apiKey: 'sk-9d7dd864e9b24418a8792818370443b5',
@@ -27,8 +31,6 @@ export const ChatView: React.FC = () => {
 		}
 	}, [chatHistory, isAiThinking, streamingContent, workflowSteps]);
 
-	const cssVar = (name: string, fallback?: string) => fallback ? `var(--${name}, ${fallback})` : `var(--${name})`;
-
 	const handleSend = async () => {
 		const text = input.trim();
 		if (!text || isAiThinking) return;
@@ -45,8 +47,7 @@ export const ChatView: React.FC = () => {
 
 		let accumulated = '';
 		try {
-			const { obsidian } = useSynapseStore.getState();
-			if (!obsidian) throw new Error('ObsidianService 未初始化');
+			const obsidian = getObsidianService();
 			const result = await runChatWorkflow(LLM_CONFIG, obsidian, {
 				userInput: text,
 				chatHistory,
@@ -98,15 +99,7 @@ export const ChatView: React.FC = () => {
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', userSelect: 'text' }}>
 			{/* 消息列表 */}
 			<div ref={listRef} style={{ flex: 1, overflow: 'auto', padding: 12, userSelect: 'text' }}>
-				{chatHistory.length === 0 && !isAiThinking && (
-					<div style={{
-						textAlign: 'center',
-						color: cssVar('text-muted'),
-						marginTop: 40,
-					}}>
-						开始与你的笔记对话...
-					</div>
-				)}
+				{chatHistory.length === 0 && !isAiThinking && <EmptyState />}
 				{chatHistory.map((msg, i) => (
 					<div key={i} style={{
 						display: 'flex',
@@ -127,7 +120,7 @@ export const ChatView: React.FC = () => {
 								{msg.content}
 							</div>
 						) : (
-							<AssistantMessage content={msg.content} cssVar={cssVar} />
+							<AssistantMessage content={msg.content} />
 						)}
 					</div>
 				))}
@@ -139,14 +132,14 @@ export const ChatView: React.FC = () => {
 						{workflowSteps.length > 0 && (
 							<div style={{ marginBottom: 6 }}>
 								{workflowSteps.map((step, i) => (
-									<WorkflowStepItem key={i} step={step} cssVar={cssVar} />
+									<WorkflowStepItem key={i} step={step} />
 								))}
 							</div>
 						)}
 						{/* 流式回复在下 */}
 						{streamingContent && (
 							<div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-								<AssistantMessage content={streamingContent} cssVar={cssVar} />
+								<AssistantMessage content={streamingContent} />
 							</div>
 						)}
 					</div>
@@ -213,108 +206,5 @@ export const ChatView: React.FC = () => {
 				)}
 			</div>
 		</div>
-	);
-};
-
-/**
- * 工作流步骤项：运行中展开显示完整 thinking，完成后折叠 + 划线
- */
-const WorkflowStepItem: React.FC<{ step: WorkflowStep; cssVar: (n: string, f?: string) => string }> = ({ step, cssVar }) => {
-	const isRunning = step.status === 'running';
-	const hasDetail = step.detail.length > 0;
-
-	// 运行中默认展开，完成后折叠
-	const [expanded, setExpanded] = useState(true);
-
-	useEffect(() => {
-		if (step.status === 'done') {
-			setExpanded(false);
-		}
-	}, [step.status]);
-
-	return (
-		<div style={{
-			fontSize: 12,
-			color: cssVar('text-muted'),
-			marginBottom: 2,
-			lineHeight: 1.4,
-		}}>
-			<div
-				onClick={() => hasDetail ? setExpanded(!expanded) : undefined}
-				style={{
-					display: 'flex',
-					alignItems: 'center',
-					gap: 4,
-					padding: '2px 0',
-					cursor: hasDetail ? 'pointer' : 'default',
-				}}
-			>
-				{hasDetail ? (
-					expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
-				) : (
-					<span style={{ width: 12 }} />
-				)}
-				{isRunning ? (
-					<span style={{
-						display: 'inline-block',
-						width: 8,
-						height: 8,
-						border: `1.5px solid ${cssVar('text-muted')}`,
-						borderRightColor: 'transparent',
-						borderRadius: '50%',
-						animation: 'synapse-spin 0.8s linear infinite',
-						flexShrink: 0,
-					}} />
-				) : (
-					<span style={{ fontSize: 10 }}>✓</span>
-				)}
-				<span style={{
-					textDecoration: isRunning ? 'none' : 'line-through',
-					opacity: isRunning ? 1 : 0.6,
-				}}>{step.label}</span>
-			</div>
-			{expanded && hasDetail && (
-				<div style={{
-					marginLeft: 16,
-					padding: '4px 8px',
-					background: cssVar('background-secondary'),
-					borderRadius: 6,
-					fontSize: 11,
-					lineHeight: 1.5,
-					whiteSpace: 'pre-wrap',
-					wordBreak: 'break-word',
-					maxHeight: 150,
-					overflow: 'auto',
-				}}>
-					{step.detail}
-				</div>
-			)}
-		</div>
-	);
-};
-
-/**
- * AI 回复气泡：支持 Markdown 渲染
- */
-const AssistantMessage: React.FC<{ content: string; cssVar: (name: string, fallback?: string) => string }> = ({ content, cssVar }) => {
-	const html = useMemo(() => {
-		marked.setOptions({ breaks: true, gfm: true });
-		return marked.parse(content) as string;
-	}, [content]);
-
-	return (
-		<div
-			className="synapse-ai-message"
-			dangerouslySetInnerHTML={{ __html: html }}
-			style={{
-				maxWidth: '80%',
-				padding: '8px 12px',
-				borderRadius: 10,
-				background: cssVar('background-secondary'),
-				color: cssVar('text-normal'),
-				lineHeight: 1.6,
-				wordBreak: 'break-word',
-			}}
-		/>
 	);
 };

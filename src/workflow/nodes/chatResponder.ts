@@ -1,11 +1,11 @@
 import { SystemMessage, HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { createLLM, LLMConfig } from '../../services/llmService';
 import { ChatState } from '../types';
-import { WorkflowCallbacks } from '../chatGraph';
+import { StreamingCallbacks } from '../chatGraph';
 
 const CHAT_SYSTEM = '你是一个友好的笔记助手，用中文简洁地回答用户的问题。';
 
-export function createChatResponder(llmConfig: LLMConfig, callbacks: WorkflowCallbacks = {}) {
+export function createChatResponder(llmConfig: LLMConfig, callbacks: StreamingCallbacks = {}) {
 	return async function chatResponder(state: ChatState): Promise<Partial<ChatState>> {
 		// 前置节点已经生成了回复，直接透传
 		if (state.aiResponse) {

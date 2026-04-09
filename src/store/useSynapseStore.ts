@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { App } from 'obsidian';
-import { ObsidianService } from '../services/ObsidianService';
+import { getObsidianService, getApp } from '../services/serviceContainer';
 
 export interface ChatMessage {
 	role: 'user' | 'assistant';
@@ -14,8 +13,6 @@ export interface WorkflowStep {
 }
 
 interface SynapseState {
-	app: App | null;
-	obsidian: ObsidianService | null;
 	chatHistory: ChatMessage[];
 	isAiThinking: boolean;
 	streamingContent: string;
@@ -25,7 +22,6 @@ interface SynapseState {
 	currentNotePath: string | null;
 	abortController: AbortController | null;
 
-	initApp: (app: App) => void;
 	addMessage: (msg: ChatMessage) => void;
 	clearHistory: () => void;
 	setAiThinking: (val: boolean) => void;
@@ -42,8 +38,6 @@ interface SynapseState {
 }
 
 export const useSynapseStore = create<SynapseState>((set, get) => ({
-	app: null,
-	obsidian: null,
 	chatHistory: [],
 	isAiThinking: false,
 	streamingContent: '',
@@ -53,7 +47,6 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 	currentNotePath: null,
 	abortController: null,
 
-	initApp: (app) => set({ app, obsidian: new ObsidianService(app) }),
 	addMessage: (msg) => set((s) => ({ chatHistory: [...s.chatHistory, msg] })),
 	clearHistory: () => set({ chatHistory: [] }),
 	setAiThinking: (val) => set({ isAiThinking: val }),
@@ -88,8 +81,8 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 		}
 	},
 	refreshCurrentNote: async () => {
-		const { obsidian, app } = get();
-		if (!obsidian || !app) return;
+		const obsidian = getObsidianService();
+		const app = getApp();
 		const file = app.workspace.getActiveFile();
 		const newPath = file ? file.path : null;
 		if (newPath === get().currentNotePath) return;

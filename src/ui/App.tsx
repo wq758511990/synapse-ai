@@ -2,6 +2,7 @@ import React from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useSynapseStore } from '../store/useSynapseStore';
 import { ChatView } from './views/ChatView';
+import { cssVar } from './cssUtils';
 
 /**
  * 顶层 Shell：悬浮气泡 + 聊天面板
@@ -9,8 +10,6 @@ import { ChatView } from './views/ChatView';
  */
 export const App: React.FC = () => {
 	const { isPanelVisible, togglePanel } = useSynapseStore();
-
-	const cssVar = (name: string, fallback?: string) => fallback ? `var(--${name}, ${fallback})` : `var(--${name})`;
 
 	return (
 		<div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>

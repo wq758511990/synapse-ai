@@ -38,13 +38,26 @@ function routeByIntent(state: typeof ChatAnnotation.State): string {
 	return INTENT_TO_NODE[state.intent] ?? "chatResponder";
 }
 
-export interface WorkflowCallbacks {
+/** 流式回调（仅 chatResponder 使用） */
+export interface StreamingCallbacks {
 	onToken?: (token: string) => void;
-	onStepStart?: (label: string) => void;
-	onStepDetail?: (detail: string) => void;
-	onStepDone?: () => void;
 	signal?: AbortSignal;
 }
+
+/** 步骤进度回调（withStepTracking 使用） */
+export interface StepCallbacks {
+	onStepStart?: (label: string) => void;
+	onStepDone?: () => void;
+}
+
+/** thinking 内容回调（intentClassifier、noteSearcher 使用） */
+export interface DetailCallbacks {
+	onStepDetail?: (detail: string) => void;
+	signal?: AbortSignal;
+}
+
+/** 组合接口 — 调用方使用 */
+export interface WorkflowCallbacks extends StreamingCallbacks, StepCallbacks, DetailCallbacks {}
 
 // 包装节点函数，执行前后通知 UI
 function withStepTracking<T extends (state: typeof ChatAnnotation.State) => Promise<Partial<typeof ChatAnnotation.State>>>(
@@ -111,49 +124,16 @@ export async function runChatWorkflow(
 	},
 	callbacks: WorkflowCallbacks = {},
 ): Promise<{ aiResponse: string }> {
-	try {
-		const initialState = {
-			userInput: input.userInput,
-			chatHistory: input.chatHistory,
-			currentNoteContent: input.currentNoteContent,
-			intent: input.intent ?? "chat",
-			contextMessages: [],
-			aiResponse: "",
-		};
+	const initialState = {
+		userInput: input.userInput,
+		chatHistory: input.chatHistory,
+		currentNoteContent: input.currentNoteContent,
+		intent: input.intent ?? "chat",
+		contextMessages: [],
+		aiResponse: "",
+	};
 
-		// 如果直接指定了 intent，跳过 intentClassifier 节点
-		if (input.intent) {
-			if (input.intent === "note_search") {
-				callbacks.onStepStart?.("正在搜索相关笔记...");
-				const searcher = createNoteSearcher(llmConfig, obsidian, callbacks);
-				const searchResult = await searcher(initialState);
-				const fullState = { ...initialState, ...searchResult };
-				callbacks.onStepDone?.();
-
-				callbacks.onStepStart?.("正在生成回复...");
-				const responder = createChatResponder(llmConfig, callbacks);
-				const result = await responder(fullState);
-				callbacks.onStepDone?.();
-				return { aiResponse: result.aiResponse ?? "" };
-			}
-
-			// note_qa / note_summary 走 contextBuilder → chatResponder
-			callbacks.onStepStart?.("正在整理笔记上下文...");
-			const cbResult = await contextBuilder(initialState);
-			const fullState = { ...initialState, ...cbResult };
-			callbacks.onStepDone?.();
-
-			callbacks.onStepStart?.("正在生成回复...");
-			const responder = createChatResponder(llmConfig, callbacks);
-			const result = await responder(fullState);
-			callbacks.onStepDone?.();
-			return { aiResponse: result.aiResponse ?? "" };
-		}
-
-		const app = createChatWorkflow(llmConfig, obsidian, callbacks);
-		const result = await app.invoke(initialState, { signal: callbacks.signal });
-		return { aiResponse: result.aiResponse ?? "" };
-	} finally {
-		// 清理由 UI 层的 finally 处理
-	}
+	const app = createChatWorkflow(llmConfig, obsidian, callbacks);
+	const result = await app.invoke(initialState, { signal: callbacks.signal });
+	return { aiResponse: result.aiResponse ?? "" };
 }

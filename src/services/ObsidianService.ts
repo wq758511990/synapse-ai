@@ -13,7 +13,7 @@ export interface NoteInfo {
  * 封装 Obsidian 底层 API 操作
  */
 export class ObsidianService {
-	constructor(private app: App) {}
+	constructor(public readonly app: App) {}
 
 	/** 获取当前活动笔记的全文内容 */
 	async getActiveNoteContent(): Promise<string | null> {

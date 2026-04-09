@@ -3,6 +3,7 @@ import { createRoot, Root } from 'react-dom/client';
 import React from 'react';
 import { App } from './ui/App';
 import { useSynapseStore } from './store/useSynapseStore';
+import { initServices } from './services/serviceContainer';
 
 const CONTAINER_ID = 'synapse-ai-root';
 
@@ -10,9 +11,8 @@ export default class SynapseAI extends Plugin {
 	private root: Root | null = null;
 
 	async onload() {
-		// 初始化 store
-		const store = useSynapseStore.getState();
-		store.initApp(this.app);
+		// 初始化服务
+		initServices(this.app);
 
 		// 监听活动笔记切换，自动刷新上下文
 		this.registerEvent(

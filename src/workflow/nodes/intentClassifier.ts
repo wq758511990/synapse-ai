@@ -1,7 +1,8 @@
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { createLLM, LLMConfig } from '../../services/llmService';
 import { ChatState, Intent } from '../types';
-import { WorkflowCallbacks } from '../chatGraph';
+import { DetailCallbacks } from '../chatGraph';
+import { extractThinking } from './thinkingUtils';
 
 const SYSTEM_PROMPT = `你是意图分类器。根据用户消息返回一个 JSON 对象：{"intent": "chat"|"note_qa"|"note_summary"|"note_search"}
 
@@ -13,27 +14,13 @@ const SYSTEM_PROMPT = `你是意图分类器。根据用户消息返回一个 JS
 
 只返回 JSON，不要任何其他文字。`;
 
-const THINK_CLOSE = '</think>';
-
-function extractThinking(responseContent: unknown): { thinking: string; text: string } {
-	let raw: string;
-	if (typeof responseContent === 'string') {
-		raw = responseContent;
-	} else {
-		raw = JSON.stringify(responseContent);
-	}
-
-	const thinkEnd = raw.lastIndexOf(THINK_CLOSE);
-	if (thinkEnd >= 0) {
-		const thinking = raw.slice(0, thinkEnd).trim();
-		const text = raw.slice(thinkEnd + THINK_CLOSE.length).trim();
-		return { thinking, text };
-	}
-	return { thinking: '', text: raw };
-}
-
-export function createIntentClassifier(llmConfig: LLMConfig, callbacks: WorkflowCallbacks = {}) {
+export function createIntentClassifier(llmConfig: LLMConfig, callbacks: DetailCallbacks = {}) {
 	return async function intentClassifier(state: ChatState): Promise<Partial<ChatState>> {
+		// 如果调用方已经指定了 intent，跳过分类
+		if (state.intent && state.intent !== 'chat') {
+			return { intent: state.intent };
+		}
+
 		const llm = createLLM(llmConfig);
 		const response = await llm.invoke([
 			new SystemMessage(SYSTEM_PROMPT),
