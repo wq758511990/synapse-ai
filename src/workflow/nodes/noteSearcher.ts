@@ -53,7 +53,7 @@ export function createNoteSearcher(
 		// 2. 用每个关键词搜索，去重合并
 		const seen = new Map<string, NoteInfo>();
 		for (const keyword of searchKeywords) {
-			const results = obsidian.searchNotes(keyword, 10);
+			const results = await obsidian.searchNotes(keyword, 10);
 			for (const r of results) {
 				if (!seen.has(r.path)) {
 					seen.set(r.path, r);
@@ -66,7 +66,18 @@ export function createNoteSearcher(
 		console.warn("[Synapse AI] 候选笔记:", candidates.map((c) => c.name));
 
 		if (candidates.length === 0) {
-			return { aiResponse: `没有找到与"${state.userInput}"相关的笔记。` };
+			const systemPrompt = '你是一个笔记助手。用户搜索了笔记但没有找到相关结果，请友好地告知用户没有找到相关笔记，可以建议用户尝试其他关键词。';
+			const userContent = `用户搜索意图：${state.userInput}\n没有找到相关笔记。`;
+
+			return {
+				contextMessages: [
+					{ role: "system", content: systemPrompt },
+					...state.chatHistory
+						.slice(-10)
+						.map((m) => ({ role: m.role, content: m.content })),
+					{ role: "user", content: userContent },
+				],
+			};
 		}
 
 		// 3. AI 精筛
@@ -113,7 +124,18 @@ export function createNoteSearcher(
 		}
 
 		if (noteContents.length === 0) {
-			return { aiResponse: "找到了相关笔记但无法读取内容。" };
+			const systemPrompt = '你是一个笔记助手。找到了相关笔记但无法读取内容，请友好地告知用户。';
+			const userContent = `用户搜索意图：${state.userInput}\n找到了相关笔记但无法读取内容。`;
+
+			return {
+				contextMessages: [
+					{ role: "system", content: systemPrompt },
+					...state.chatHistory
+						.slice(-10)
+						.map((m) => ({ role: m.role, content: m.content })),
+					{ role: "user", content: userContent },
+				],
+			};
 		}
 
 		// 5. 组装 context 给 chatResponder

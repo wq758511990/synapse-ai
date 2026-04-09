@@ -40,7 +40,7 @@ export class ObsidianService {
 	}
 
 	/** 关键词搜索所有笔记（本地粗筛），返回匹配的笔记摘要列表 */
-	searchNotes(query: string, maxResults = 20): NoteInfo[] {
+	async searchNotes(query: string, maxResults = 20): Promise<NoteInfo[]> {
 		const searchFn = prepareFuzzySearch(query);
 		const files = this.getAllMarkdownFiles();
 		const results: NoteInfo[] = [];
@@ -49,14 +49,16 @@ export class ObsidianService {
 
 		for (const file of files) {
 			const cache = this.app.metadataCache.getFileCache(file);
+			const content = await this.app.vault.read(file);
 
-			// 搜索范围：文件名 + frontmatter summary + headings + tags
+			// 搜索范围：文件名 + frontmatter summary + headings + tags + 笔记正文
 			const searchableText = [
 				file.basename,
 				file.path,
 				cache?.frontmatter?.summary ?? "",
 				...(cache?.headings?.map((h) => h.heading) ?? []),
 				...(cache?.tags?.map((t) => t.tag) ?? []),
+				content,
 			].join(" ");
 
 			const match = searchFn(searchableText);
