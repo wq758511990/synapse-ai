@@ -1,8 +1,56 @@
-/*
+/* Synapse AI - Markdown 渲染样式 */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
-*/
+#synapse-ai-root .synapse-ai-message h1,
+#synapse-ai-root .synapse-ai-message h2,
+#synapse-ai-root .synapse-ai-message h3 {
+	margin: 8px 0 4px;
+	line-height: 1.3;
+}
+#synapse-ai-root .synapse-ai-message h1 { font-size: 1.3em; }
+#synapse-ai-root .synapse-ai-message h2 { font-size: 1.15em; }
+#synapse-ai-root .synapse-ai-message h3 { font-size: 1.05em; }
+#synapse-ai-root .synapse-ai-message p { margin: 4px 0; }
+#synapse-ai-root .synapse-ai-message ul,
+#synapse-ai-root .synapse-ai-message ol { margin: 4px 0; padding-left: 20px; }
+#synapse-ai-root .synapse-ai-message li { margin: 2px 0; }
+#synapse-ai-root .synapse-ai-message code {
+	background: var(--background-modifier-border);
+	padding: 1px 4px;
+	border-radius: 3px;
+	font-size: 0.9em;
+	font-family: var(--font-monospace);
+}
+#synapse-ai-root .synapse-ai-message pre {
+	background: var(--background-modifier-border);
+	padding: 8px 10px;
+	border-radius: 6px;
+	overflow-x: auto;
+	margin: 6px 0;
+}
+#synapse-ai-root .synapse-ai-message pre code {
+	background: none;
+	padding: 0;
+}
+#synapse-ai-root .synapse-ai-message blockquote {
+	border-left: 3px solid var(--interactive-accent);
+	margin: 6px 0;
+	padding: 2px 10px;
+	color: var(--text-muted);
+}
+#synapse-ai-root .synapse-ai-message table {
+	border-collapse: collapse;
+	margin: 6px 0;
+}
+#synapse-ai-root .synapse-ai-message th,
+#synapse-ai-root .synapse-ai-message td {
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 8px;
+}
+#synapse-ai-root .synapse-ai-message a {
+	color: var(--text-accent);
+}
+#synapse-ai-root .synapse-ai-message hr {
+	border: none;
+	border-top: 1px solid var(--background-modifier-border);
+	margin: 8px 0;
+}
