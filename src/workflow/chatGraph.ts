@@ -43,6 +43,7 @@ export interface WorkflowCallbacks {
 	onStepStart?: (label: string) => void;
 	onStepDetail?: (detail: string) => void;
 	onStepDone?: () => void;
+	signal?: AbortSignal;
 }
 
 // 包装节点函数，执行前后通知 UI
@@ -150,7 +151,7 @@ export async function runChatWorkflow(
 		}
 
 		const app = createChatWorkflow(llmConfig, obsidian, callbacks);
-		const result = await app.invoke(initialState);
+		const result = await app.invoke(initialState, { signal: callbacks.signal });
 		return { aiResponse: result.aiResponse ?? "" };
 	} finally {
 		// 清理由 UI 层的 finally 处理

@@ -1,4 +1,4 @@
-import { SendHorizontal, ChevronDown, ChevronRight } from 'lucide-react';
+import { SendHorizontal, ChevronDown, ChevronRight, CircleStop } from 'lucide-react';
 import { marked } from 'marked';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LLMConfig } from '../../services/llmService';
@@ -39,11 +39,14 @@ export const ChatView: React.FC = () => {
 		resetStreaming();
 		clearWorkflowSteps();
 
+		const controller = new AbortController();
+		const { setAbortController } = useSynapseStore.getState();
+		setAbortController(controller);
+
+		let accumulated = '';
 		try {
 			const { obsidian } = useSynapseStore.getState();
 			if (!obsidian) throw new Error('ObsidianService 未初始化');
-
-			let accumulated = '';
 			const result = await runChatWorkflow(LLM_CONFIG, obsidian, {
 				userInput: text,
 				chatHistory,
@@ -56,17 +59,32 @@ export const ChatView: React.FC = () => {
 				onStepStart: (label) => addWorkflowStep(label),
 				onStepDetail: (detail) => updateLastStep(detail),
 				onStepDone: () => completeLastStep(),
+				signal: controller.signal,
 			});
 
 			resetStreaming();
+			clearWorkflowSteps();
 			addMessage({ role: 'assistant', content: result.aiResponse || '（无响应）' });
 		} catch (error: unknown) {
 			resetStreaming();
-			const msg = error instanceof Error ? error.message : '未知错误';
-			addMessage({ role: 'assistant', content: `请求失败: ${msg}` });
+			clearWorkflowSteps();
+			// 用户主动停止时不显示错误
+			if (controller.signal.aborted) {
+				if (accumulated) {
+					addMessage({ role: 'assistant', content: accumulated });
+				}
+			} else {
+				const msg = error instanceof Error ? error.message : '未知错误';
+				addMessage({ role: 'assistant', content: `请求失败: ${msg}` });
+			}
 		} finally {
+			setAbortController(null);
 			setAiThinking(false);
 		}
+	};
+
+	const handleStop = () => {
+		useSynapseStore.getState().abortChat();
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -114,19 +132,23 @@ export const ChatView: React.FC = () => {
 					</div>
 				))}
 
-				{/* 工作流步骤 */}
-				{workflowSteps.length > 0 && (
+				{/* AI 思考中：工作流步骤 + 流式回复 */}
+				{isAiThinking && (
 					<div style={{ marginBottom: 8 }}>
-						{workflowSteps.map((step, i) => (
-							<WorkflowStepItem key={i} step={step} cssVar={cssVar} />
-						))}
-					</div>
-				)}
-
-				{/* 流式输出中的 AI 回复 */}
-				{streamingContent && (
-					<div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
-						<AssistantMessage content={streamingContent} cssVar={cssVar} />
+						{/* 工作流步骤在上 */}
+						{workflowSteps.length > 0 && (
+							<div style={{ marginBottom: 6 }}>
+								{workflowSteps.map((step, i) => (
+									<WorkflowStepItem key={i} step={step} cssVar={cssVar} />
+								))}
+							</div>
+						)}
+						{/* 流式回复在下 */}
+						{streamingContent && (
+							<div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+								<AssistantMessage content={streamingContent} cssVar={cssVar} />
+							</div>
+						)}
 					</div>
 				)}
 			</div>
@@ -154,33 +176,55 @@ export const ChatView: React.FC = () => {
 						fontSize: 13,
 					}}
 				/>
-				<button
-					onClick={() => void handleSend()}
-					disabled={isAiThinking || !input.trim()}
-					style={{
-						padding: '8px 10px',
-						borderRadius: 8,
-						border: 'none',
-						background: cssVar('interactive-accent'),
-						color: cssVar('text-on-accent', '#fff'),
-						cursor: isAiThinking ? 'not-allowed' : 'pointer',
-						display: 'flex',
-						alignItems: 'center',
-						opacity: isAiThinking || !input.trim() ? 0.5 : 1,
-					}}
-				>
-					<SendHorizontal size={16} />
-				</button>
+				{isAiThinking ? (
+					<button
+						onClick={handleStop}
+						style={{
+							padding: '8px 10px',
+							borderRadius: 8,
+							border: 'none',
+							background: cssVar('text-error', 'var(--text-error)'),
+							color: '#fff',
+							cursor: 'pointer',
+							display: 'flex',
+							alignItems: 'center',
+						}}
+					>
+						<CircleStop size={16} />
+					</button>
+				) : (
+					<button
+						onClick={() => void handleSend()}
+						disabled={!input.trim()}
+						style={{
+							padding: '8px 10px',
+							borderRadius: 8,
+							border: 'none',
+							background: cssVar('interactive-accent'),
+							color: cssVar('text-on-accent', '#fff'),
+							cursor: 'pointer',
+							display: 'flex',
+							alignItems: 'center',
+							opacity: !input.trim() ? 0.5 : 1,
+						}}
+					>
+						<SendHorizontal size={16} />
+					</button>
+				)}
 			</div>
 		</div>
 	);
 };
 
 /**
- * 工作流步骤项：运行中展开显示 detail，完成后折叠
+ * 工作流步骤项：运行中展开显示完整 thinking，完成后折叠 + 划线
  */
 const WorkflowStepItem: React.FC<{ step: WorkflowStep; cssVar: (n: string, f?: string) => string }> = ({ step, cssVar }) => {
-	const [expanded, setExpanded] = useState(step.status === 'running');
+	const isRunning = step.status === 'running';
+	const hasDetail = step.detail.length > 0;
+
+	// 运行中默认展开，完成后折叠
+	const [expanded, setExpanded] = useState(true);
 
 	useEffect(() => {
 		if (step.status === 'done') {
@@ -188,41 +232,48 @@ const WorkflowStepItem: React.FC<{ step: WorkflowStep; cssVar: (n: string, f?: s
 		}
 	}, [step.status]);
 
-	const isRunning = step.status === 'running';
-
 	return (
 		<div style={{
 			fontSize: 12,
 			color: cssVar('text-muted'),
 			marginBottom: 2,
+			lineHeight: 1.4,
 		}}>
 			<div
-				onClick={() => step.detail ? setExpanded(!expanded) : undefined}
+				onClick={() => hasDetail ? setExpanded(!expanded) : undefined}
 				style={{
 					display: 'flex',
 					alignItems: 'center',
 					gap: 4,
-					cursor: step.detail ? 'pointer' : 'default',
 					padding: '2px 0',
+					cursor: hasDetail ? 'pointer' : 'default',
 				}}
 			>
-				{step.detail ? (
+				{hasDetail ? (
 					expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
 				) : (
 					<span style={{ width: 12 }} />
 				)}
-				{isRunning && <span className="synapse-step-spinner" style={{
-					display: 'inline-block',
-					width: 8,
-					height: 8,
-					border: `1.5px solid ${cssVar('text-muted')}`,
-					borderRightColor: 'transparent',
-					borderRadius: '50%',
-					animation: 'synapse-spin 0.8s linear infinite',
-				}} />}
-				<span>{step.label}</span>
+				{isRunning ? (
+					<span style={{
+						display: 'inline-block',
+						width: 8,
+						height: 8,
+						border: `1.5px solid ${cssVar('text-muted')}`,
+						borderRightColor: 'transparent',
+						borderRadius: '50%',
+						animation: 'synapse-spin 0.8s linear infinite',
+						flexShrink: 0,
+					}} />
+				) : (
+					<span style={{ fontSize: 10 }}>✓</span>
+				)}
+				<span style={{
+					textDecoration: isRunning ? 'none' : 'line-through',
+					opacity: isRunning ? 1 : 0.6,
+				}}>{step.label}</span>
 			</div>
-			{expanded && step.detail && (
+			{expanded && hasDetail && (
 				<div style={{
 					marginLeft: 16,
 					padding: '4px 8px',
@@ -232,7 +283,7 @@ const WorkflowStepItem: React.FC<{ step: WorkflowStep; cssVar: (n: string, f?: s
 					lineHeight: 1.5,
 					whiteSpace: 'pre-wrap',
 					wordBreak: 'break-word',
-					maxHeight: 120,
+					maxHeight: 150,
 					overflow: 'auto',
 				}}>
 					{step.detail}

@@ -34,7 +34,7 @@ export function createChatResponder(llmConfig: LLMConfig, callbacks: WorkflowCal
 		}
 
 		// 流式输出
-		const stream = await llm.stream(messages);
+		const stream = await llm.stream(messages, { signal: callbacks.signal });
 		let fullResponse = '';
 		for await (const chunk of stream) {
 			const token = chunk.content as string;

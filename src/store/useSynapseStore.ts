@@ -23,6 +23,7 @@ interface SynapseState {
 	isPanelVisible: boolean;
 	currentNoteContent: string | null;
 	currentNotePath: string | null;
+	abortController: AbortController | null;
 
 	initApp: (app: App) => void;
 	addMessage: (msg: ChatMessage) => void;
@@ -36,6 +37,8 @@ interface SynapseState {
 	clearWorkflowSteps: () => void;
 	togglePanel: () => void;
 	refreshCurrentNote: () => Promise<void>;
+	setAbortController: (ctrl: AbortController | null) => void;
+	abortChat: () => void;
 }
 
 export const useSynapseStore = create<SynapseState>((set, get) => ({
@@ -48,6 +51,7 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 	isPanelVisible: false,
 	currentNoteContent: null,
 	currentNotePath: null,
+	abortController: null,
 
 	initApp: (app) => set({ app, obsidian: new ObsidianService(app) }),
 	addMessage: (msg) => set((s) => ({ chatHistory: [...s.chatHistory, msg] })),
@@ -75,6 +79,14 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 		}),
 	clearWorkflowSteps: () => set({ workflowSteps: [] }),
 	togglePanel: () => set((s) => ({ isPanelVisible: !s.isPanelVisible })),
+	setAbortController: (ctrl) => set({ abortController: ctrl }),
+	abortChat: () => {
+		const { abortController } = get();
+		if (abortController) {
+			abortController.abort();
+			set({ abortController: null });
+		}
+	},
 	refreshCurrentNote: async () => {
 		const { obsidian, app } = get();
 		if (!obsidian || !app) return;

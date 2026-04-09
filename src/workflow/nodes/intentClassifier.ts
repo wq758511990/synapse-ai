@@ -38,7 +38,7 @@ export function createIntentClassifier(llmConfig: LLMConfig, callbacks: Workflow
 		const response = await llm.invoke([
 			new SystemMessage(SYSTEM_PROMPT),
 			new HumanMessage(state.userInput),
-		]);
+		], { signal: callbacks.signal });
 
 		const { thinking, text } = extractThinking(response.content);
 
@@ -48,22 +48,30 @@ export function createIntentClassifier(llmConfig: LLMConfig, callbacks: Workflow
 
 		console.warn('[Synapse AI] AI 分类处理后文本:', text);
 
-		// 尝试从回复中提取 JSON
-		const jsonMatch = text.match(/\{[^}]+\}/);
-		if (!jsonMatch) {
-			console.warn('[Synapse AI] AI 分类未找到 JSON，fallback chat');
+		// 从回复中提取最后一个合法的 JSON 对象
+		// deepseek-reasoner 会在 content 中混杂推理文本，简单正则可能匹配到截断的 JSON
+		let parsed: Record<string, unknown> | null = null;
+		const allBraces = [...text.matchAll(/\{[^}]*\}/g)];
+		for (let i = allBraces.length - 1; i >= 0; i--) {
+			const match = allBraces[i];
+			if (!match?.[0]) continue;
+			try {
+				parsed = JSON.parse(match[0]) as Record<string, unknown>;
+				break;
+			} catch {
+				continue;
+			}
+		}
+
+		if (!parsed) {
+			console.warn('[Synapse AI] AI 分类未找到合法 JSON，fallback chat');
 			return { intent: 'chat' as Intent };
 		}
 
-		try {
-			const parsed = JSON.parse(jsonMatch[0]);
-			console.warn('[Synapse AI] AI 分类解析结果:', parsed);
-			const validIntents: Intent[] = ['chat', 'note_qa', 'note_summary', 'note_search'];
-			const intent = validIntents.includes(parsed.intent) ? parsed.intent : 'chat';
-			return { intent };
-		} catch (e) {
-			console.warn('[Synapse AI] AI 分类 JSON 解析失败:', e);
-			return { intent: 'chat' as Intent };
-		}
+		console.warn('[Synapse AI] AI 分类解析结果:', parsed);
+		const validIntents: string[] = ['chat', 'note_qa', 'note_summary', 'note_search'];
+		const raw = parsed.intent;
+		const intent = (typeof raw === 'string' && validIntents.includes(raw)) ? raw as Intent : 'chat' as Intent;
+		return { intent };
 	};
 }
