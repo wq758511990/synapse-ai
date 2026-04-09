@@ -1,4 +1,4 @@
-import { App, TFile, prepareFuzzySearch } from "obsidian";
+import { App, MarkdownView, Notice, TFile, prepareFuzzySearch } from "obsidian";
 
 export interface NoteInfo {
 	path: string;
@@ -160,5 +160,25 @@ export class ObsidianService {
 			}
 		}
 		return Array.from(tagSet);
+	}
+
+	/** 将文本写入当前笔记：有选中则替换选中内容，无选中则插入光标位置 */
+	insertAtCursor(content: string): boolean {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view) {
+			new Notice('请先打开一个笔记');
+			return false;
+		}
+		const editor = view.editor;
+		const selection = editor.getSelection();
+		if (selection.trim()) {
+			editor.replaceSelection(content);
+			new Notice('已替换选中内容');
+		} else {
+			const cursor = editor.getCursor();
+			editor.replaceRange('\n' + content + '\n', cursor);
+			new Notice('已插入笔记');
+		}
+		return true;
 	}
 }

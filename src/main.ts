@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, MarkdownView } from 'obsidian';
 import { createRoot, Root } from 'react-dom/client';
 import React from 'react';
 import { App } from './ui/App';
@@ -6,6 +6,7 @@ import { SynapseSettingTab } from './ui/SynapseSettingTab';
 import { useSynapseStore } from './store/useSynapseStore';
 import { initServices } from './services/serviceContainer';
 import { LLMConfig } from './services/llmService';
+import { buildWritingMessage, WritingAction } from './workflow/nodes/writingAssist';
 
 export interface SynapseAISettings {
 	llm: LLMConfig;
@@ -39,6 +40,74 @@ export default class SynapseAI extends Plugin {
 				void useSynapseStore.getState().refreshCurrentNote();
 			})
 		);
+
+		// 注册右键菜单：选中文本后显示 AI 写作辅助选项
+		this.registerEvent(
+			this.app.workspace.on('editor-menu', (menu, editor) => {
+				const selection = editor.getSelection();
+				if (!selection.trim()) return;
+
+				const items: Array<{ title: string; action: WritingAction }> = [
+					{ title: 'AI 续写', action: 'continue' },
+					{ title: 'AI 改写', action: 'rewrite' },
+					{ title: 'AI 润色', action: 'polish' },
+					{ title: 'AI 解释', action: 'explain' },
+				];
+
+				for (const item of items) {
+					menu.addItem((menuItem) => {
+						menuItem
+							.setTitle(item.title)
+							.onClick(() => {
+								const message = buildWritingMessage(item.action, selection);
+								const store = useSynapseStore.getState();
+								// 先设 pendingMessage，再打开面板
+								// 这样 ChatView 挂载时就能立即读到并处理
+								useSynapseStore.setState({ pendingMessage: message });
+								if (!store.isPanelVisible) {
+									store.togglePanel();
+								}
+							});
+					});
+				}
+			})
+		);
+
+		// 注册命令：切换聊天面板
+		this.addCommand({
+			id: 'toggle-panel',
+			name: '切换聊天面板',
+			callback: () => useSynapseStore.getState().togglePanel(),
+		});
+
+		// 注册写作辅助命令
+		const writingCommands: Array<{ id: string; name: string; action: WritingAction }> = [
+			{ id: 'writing-continue', name: 'AI 续写', action: 'continue' },
+			{ id: 'writing-rewrite', name: 'AI 改写', action: 'rewrite' },
+			{ id: 'writing-polish', name: 'AI 润色', action: 'polish' },
+			{ id: 'writing-explain', name: 'AI 解释', action: 'explain' },
+		];
+
+		for (const cmd of writingCommands) {
+			this.addCommand({
+				id: cmd.id,
+				name: cmd.name,
+				callback: () => {
+					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+					if (!view) return;
+					const selection = view.editor.getSelection();
+					if (!selection.trim()) {
+						return;
+					}
+					const message = buildWritingMessage(cmd.action, selection);
+					const store = useSynapseStore.getState();
+					useSynapseStore.setState({ pendingMessage: message });
+					if (!store.isPanelVisible) {
+						store.togglePanel();
+					}
+				},
+			});
+		}
 
 		// 创建 React 挂载容器
 		const container = document.createElement('div');

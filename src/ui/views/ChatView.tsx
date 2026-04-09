@@ -18,9 +18,86 @@ export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 		chatHistory, addMessage, isAiThinking, setAiThinking,
 		currentNoteContent, streamingContent, setStreamingContent, resetStreaming,
 		workflowSteps, addWorkflowStep, updateLastStep, completeLastStep, clearWorkflowSteps,
+		insertToNote,
 	} = useSynapseStore();
 	const [input, setInput] = useState('');
 	const listRef = useRef<HTMLDivElement>(null);
+
+	// 执行工作流的通用函数 — 同时供 handleSend 和 pendingMessage 使用
+	const sendMessage = (text: string, historyOverride?: typeof chatHistory) => {
+		if (!text || isAiThinking) return;
+
+		addMessage({ role: 'user', content: text });
+		setAiThinking(true);
+		resetStreaming();
+		clearWorkflowSteps();
+
+		const controller = new AbortController();
+		useSynapseStore.getState().setAbortController(controller);
+
+		let accumulated = '';
+		const run = async () => {
+			try {
+				const obsidian = getObsidianService();
+				const history = historyOverride ?? chatHistory;
+				const result = await runChatWorkflow(llmConfig, obsidian, {
+					userInput: text,
+					chatHistory: history,
+					currentNoteContent,
+				}, {
+					onToken: (token) => {
+						accumulated += token;
+						setStreamingContent(accumulated);
+					},
+					onStepStart: (label) => addWorkflowStep(label),
+					onStepDetail: (detail) => updateLastStep(detail),
+					onStepDone: () => completeLastStep(),
+					signal: controller.signal,
+				});
+
+				resetStreaming();
+				clearWorkflowSteps();
+				addMessage({ role: 'assistant', content: result.aiResponse || '（无响应）' });
+			} catch (error: unknown) {
+				resetStreaming();
+				clearWorkflowSteps();
+				if (controller.signal.aborted) {
+					if (accumulated) {
+						addMessage({ role: 'assistant', content: accumulated });
+					}
+				} else {
+					const msg = error instanceof Error ? error.message : '未知错误';
+					addMessage({ role: 'assistant', content: `请求失败: ${msg}` });
+				}
+			} finally {
+				useSynapseStore.getState().setAbortController(null);
+				setAiThinking(false);
+			}
+		};
+		void run();
+	};
+
+	// 检测外部触发的 pendingMessage（右键菜单 / 命令面板）
+	// 组件挂载时检查一次 store，处理"先设 pendingMessage 再打开面板"的场景
+	const hasProcessedPending = useRef(false);
+	useEffect(() => {
+		if (hasProcessedPending.current) return;
+		const pending = useSynapseStore.getState().pendingMessage;
+		if (pending && !isAiThinking) {
+			hasProcessedPending.current = true;
+			useSynapseStore.setState({ pendingMessage: null });
+			// pendingMessage 触发时，chatHistory 还没包含当前消息，用 slice(0, -1) 不合适
+			// 直接用当前 chatHistory 快照作为上下文
+			sendMessage(pending);
+		}
+	});
+
+	// 重置标记，允许下次 pendingMessage 被处理
+	useEffect(() => {
+		if (!useSynapseStore.getState().pendingMessage) {
+			hasProcessedPending.current = false;
+		}
+	});
 
 	// 自动滚动到底部
 	useEffect(() => {
@@ -29,57 +106,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 		}
 	}, [chatHistory, isAiThinking, streamingContent, workflowSteps]);
 
-	const handleSend = async () => {
+	const handleSend = () => {
 		const text = input.trim();
 		if (!text || isAiThinking) return;
-
 		setInput('');
-		addMessage({ role: 'user', content: text });
-		setAiThinking(true);
-		resetStreaming();
-		clearWorkflowSteps();
-
-		const controller = new AbortController();
-		const { setAbortController } = useSynapseStore.getState();
-		setAbortController(controller);
-
-		let accumulated = '';
-		try {
-			const obsidian = getObsidianService();
-			const result = await runChatWorkflow(llmConfig, obsidian, {
-				userInput: text,
-				chatHistory,
-				currentNoteContent,
-			}, {
-				onToken: (token) => {
-					accumulated += token;
-					setStreamingContent(accumulated);
-				},
-				onStepStart: (label) => addWorkflowStep(label),
-				onStepDetail: (detail) => updateLastStep(detail),
-				onStepDone: () => completeLastStep(),
-				signal: controller.signal,
-			});
-
-			resetStreaming();
-			clearWorkflowSteps();
-			addMessage({ role: 'assistant', content: result.aiResponse || '（无响应）' });
-		} catch (error: unknown) {
-			resetStreaming();
-			clearWorkflowSteps();
-			// 用户主动停止时不显示错误
-			if (controller.signal.aborted) {
-				if (accumulated) {
-					addMessage({ role: 'assistant', content: accumulated });
-				}
-			} else {
-				const msg = error instanceof Error ? error.message : '未知错误';
-				addMessage({ role: 'assistant', content: `请求失败: ${msg}` });
-			}
-		} finally {
-			setAbortController(null);
-			setAiThinking(false);
-		}
+		sendMessage(text);
 	};
 
 	const handleStop = () => {
@@ -89,7 +120,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
-			void handleSend();
+			handleSend();
 		}
 	};
 
@@ -118,7 +149,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 								{msg.content}
 							</div>
 						) : (
-							<AssistantMessage content={msg.content} />
+							<AssistantMessage content={msg.content} onInsert={insertToNote} />
 						)}
 					</div>
 				))}
@@ -185,7 +216,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 					</button>
 				) : (
 					<button
-						onClick={() => void handleSend()}
+						onClick={handleSend}
 						disabled={!input.trim()}
 						style={{
 							padding: '8px 10px',

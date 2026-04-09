@@ -21,6 +21,7 @@ interface SynapseState {
 	currentNoteContent: string | null;
 	currentNotePath: string | null;
 	abortController: AbortController | null;
+	pendingMessage: string | null;
 
 	addMessage: (msg: ChatMessage) => void;
 	clearHistory: () => void;
@@ -35,6 +36,7 @@ interface SynapseState {
 	refreshCurrentNote: () => Promise<void>;
 	setAbortController: (ctrl: AbortController | null) => void;
 	abortChat: () => void;
+	insertToNote: (content: string) => void;
 }
 
 export const useSynapseStore = create<SynapseState>((set, get) => ({
@@ -46,6 +48,7 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 	currentNoteContent: null,
 	currentNotePath: null,
 	abortController: null,
+	pendingMessage: null,
 
 	addMessage: (msg) => set((s) => ({ chatHistory: [...s.chatHistory, msg] })),
 	clearHistory: () => set({ chatHistory: [] }),
@@ -88,5 +91,8 @@ export const useSynapseStore = create<SynapseState>((set, get) => ({
 		if (newPath === get().currentNotePath) return;
 		const content = file ? await obsidian.getActiveNoteContent() : null;
 		set({ currentNoteContent: content, currentNotePath: newPath });
+	},
+	insertToNote: (content) => {
+		getObsidianService().insertAtCursor(content);
 	},
 }));
