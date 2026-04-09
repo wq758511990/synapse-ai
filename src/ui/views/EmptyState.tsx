@@ -21,6 +21,7 @@ export const EmptyState: React.FC = () => (
 			['笔记问答', '「这篇讲了什么」「帮我分析这段内容」'],
 			['笔记摘要', '「帮我总结一下当前笔记」'],
 			['笔记搜索', '「帮我找关于 XX 的笔记」'],
+			['笔记打标', '「给当前笔记打标签」「给所有笔记打标签」'],
 		].map(([title, desc]) => (
 			<div key={title} style={{
 				padding: '6px 10px',

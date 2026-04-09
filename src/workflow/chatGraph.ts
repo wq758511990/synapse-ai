@@ -6,6 +6,7 @@ import { createChatResponder } from "./nodes/chatResponder";
 import { contextBuilder } from "./nodes/contextBuilder";
 import { createIntentClassifier } from "./nodes/intentClassifier";
 import { createNoteSearcher } from "./nodes/noteSearcher";
+import { createNoteTagger } from "./nodes/noteTagger";
 import { Intent } from "./types";
 
 // 定义 Graph State
@@ -24,6 +25,7 @@ const INTENT_TO_NODE: Record<Intent, string> = {
 	note_qa: "contextBuilder",
 	note_summary: "contextBuilder",
 	note_search: "noteSearcher",
+	note_tagging: "noteTagger",
 };
 
 // 节点进度提示
@@ -31,6 +33,7 @@ const NODE_LABELS: Record<string, string> = {
 	intentClassifier: "正在分析你的意图...",
 	contextBuilder: "正在整理笔记上下文...",
 	noteSearcher: "正在搜索相关笔记...",
+	noteTagger: "正在为笔记打标签...",
 	chatResponder: "正在生成回复...",
 };
 
@@ -84,6 +87,7 @@ export function createChatWorkflow(
 	const intentClassifier = createIntentClassifier(llmConfig, callbacks);
 	const chatResponder = createChatResponder(llmConfig, callbacks);
 	const noteSearcher = createNoteSearcher(llmConfig, obsidian, callbacks);
+	const noteTagger = createNoteTagger(llmConfig, obsidian, callbacks);
 
 	const graph = new StateGraph(ChatAnnotation)
 		.addNode(
@@ -99,14 +103,17 @@ export function createChatWorkflow(
 			withStepTracking("chatResponder", chatResponder, callbacks),
 		)
 		.addNode("noteSearcher", withStepTracking("noteSearcher", noteSearcher, callbacks))
+		.addNode("noteTagger", withStepTracking("noteTagger", noteTagger, callbacks))
 		.addEdge("__start__", "intentClassifier")
 		.addConditionalEdges("intentClassifier", routeByIntent, {
 			chatResponder: "chatResponder",
 			contextBuilder: "contextBuilder",
 			noteSearcher: "noteSearcher",
+			noteTagger: "noteTagger",
 		})
 		.addEdge("contextBuilder", "chatResponder")
 		.addEdge("noteSearcher", "chatResponder")
+		.addEdge("noteTagger", "chatResponder")
 		.addEdge("chatResponder", "__end__");
 
 	return graph.compile();

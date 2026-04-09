@@ -1,6 +1,6 @@
 import { ChatMessage } from '../store/useSynapseStore';
 
-export type Intent = 'chat' | 'note_qa' | 'note_summary' | 'note_search';
+export type Intent = 'chat' | 'note_qa' | 'note_summary' | 'note_search' | 'note_tagging';
 
 export interface ChatState {
 	userInput: string;

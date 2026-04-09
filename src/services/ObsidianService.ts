@@ -136,4 +136,29 @@ export class ObsidianService {
 	getLinkGraph(): Record<string, Record<string, number>> {
 		return this.app.metadataCache.resolvedLinks;
 	}
+
+	/** 获取指定文件夹下的所有 Markdown 文件 */
+	getFilesInFolder(folderPath: string): TFile[] {
+		const prefix = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+		return this.getAllMarkdownFiles().filter((f) => f.path.startsWith(prefix));
+	}
+
+	/** 收集 vault 中所有已有标签（去重） */
+	getAllTags(): string[] {
+		const tagSet = new Set<string>();
+		for (const file of this.getAllMarkdownFiles()) {
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (cache?.tags) {
+				for (const t of cache.tags) {
+					tagSet.add(t.tag);
+				}
+			}
+			if (cache?.frontmatter?.tags && Array.isArray(cache.frontmatter.tags)) {
+				for (const t of cache.frontmatter.tags) {
+					if (typeof t === "string") tagSet.add(t.startsWith("#") ? t : `#${t}`);
+				}
+			}
+		}
+		return Array.from(tagSet);
+	}
 }

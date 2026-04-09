@@ -4,13 +4,14 @@ import { ChatState, Intent } from '../types';
 import { DetailCallbacks } from '../chatGraph';
 import { extractThinking } from './thinkingUtils';
 
-const SYSTEM_PROMPT = `你是意图分类器。根据用户消息返回一个 JSON 对象：{"intent": "chat"|"note_qa"|"note_summary"|"note_search"}
+const SYSTEM_PROMPT = `你是意图分类器。根据用户消息返回一个 JSON 对象：{"intent": "chat"|"note_qa"|"note_summary"|"note_search"|"note_tagging"}
 
 分类规则：
 - chat: 闲聊、一般问答，不需要参考笔记内容
 - note_qa: 需要基于当前笔记内容来回答（如"这篇讲了什么"、"帮我分析这段内容"、"帮我改一下这段"）
 - note_summary: 需要对当前笔记生成摘要或总结
 - note_search: 需要在整个笔记库中搜索相关笔记（如"帮我找关于XX的笔记"、"我之前写的关于XX的内容在哪里"、"搜索一下相关笔记"）
+- note_tagging: 需要给笔记添加标签（如"给这篇笔记打标签"、"帮我给所有笔记打标签"、"给XX文件夹下的笔记添加标签"）
 
 只返回 JSON，不要任何其他文字。`;
 
@@ -56,7 +57,7 @@ export function createIntentClassifier(llmConfig: LLMConfig, callbacks: DetailCa
 		}
 
 		console.warn('[Synapse AI] AI 分类解析结果:', parsed);
-		const validIntents: string[] = ['chat', 'note_qa', 'note_summary', 'note_search'];
+		const validIntents: string[] = ['chat', 'note_qa', 'note_summary', 'note_search', 'note_tagging'];
 		const raw = parsed.intent;
 		const intent = (typeof raw === 'string' && validIntents.includes(raw)) ? raw as Intent : 'chat' as Intent;
 		return { intent };
