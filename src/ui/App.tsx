@@ -1,14 +1,19 @@
 import React from 'react';
 import { MessageCircle, X } from 'lucide-react';
+import { LLMConfig } from '../services/llmService';
 import { useSynapseStore } from '../store/useSynapseStore';
 import { ChatView } from './views/ChatView';
 import { cssVar } from './cssUtils';
+
+interface AppProps {
+	llmConfig: LLMConfig;
+}
 
 /**
  * 顶层 Shell：悬浮气泡 + 聊天面板
  * 样式全部使用 CSS 变量，自动适配 Obsidian 当前主题
  */
-export const App: React.FC = () => {
+export const App: React.FC<AppProps> = ({ llmConfig }) => {
 	const { isPanelVisible, togglePanel } = useSynapseStore();
 
 	return (
@@ -52,7 +57,7 @@ export const App: React.FC = () => {
 					fontFamily: cssVar('font-interface'),
 					fontSize: 14,
 				}}>
-					<ChatView />
+					<ChatView llmConfig={llmConfig} />
 				</div>
 			)}
 		</div>

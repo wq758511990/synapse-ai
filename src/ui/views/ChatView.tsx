@@ -9,13 +9,11 @@ import { AssistantMessage } from './AssistantMessage';
 import { EmptyState } from './EmptyState';
 import { WorkflowStepItem } from './WorkflowStepItem';
 
-const LLM_CONFIG: LLMConfig = {
-	apiKey: 'sk-9d7dd864e9b24418a8792818370443b5',
-	baseUrl: 'https://api.deepseek.com/v1',
-	model: 'deepseek-reasoner',
-};
+interface ChatViewProps {
+	llmConfig: LLMConfig;
+}
 
-export const ChatView: React.FC = () => {
+export const ChatView: React.FC<ChatViewProps> = ({ llmConfig }) => {
 	const {
 		chatHistory, addMessage, isAiThinking, setAiThinking,
 		currentNoteContent, streamingContent, setStreamingContent, resetStreaming,
@@ -48,7 +46,7 @@ export const ChatView: React.FC = () => {
 		let accumulated = '';
 		try {
 			const obsidian = getObsidianService();
-			const result = await runChatWorkflow(LLM_CONFIG, obsidian, {
+			const result = await runChatWorkflow(llmConfig, obsidian, {
 				userInput: text,
 				chatHistory,
 				currentNoteContent,

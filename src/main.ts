@@ -2,15 +2,34 @@ import { Plugin } from 'obsidian';
 import { createRoot, Root } from 'react-dom/client';
 import React from 'react';
 import { App } from './ui/App';
+import { SynapseSettingTab } from './ui/SynapseSettingTab';
 import { useSynapseStore } from './store/useSynapseStore';
 import { initServices } from './services/serviceContainer';
+import { LLMConfig } from './services/llmService';
+
+export interface SynapseAISettings {
+	llm: LLMConfig;
+}
+
+const DEFAULT_SETTINGS: SynapseAISettings = {
+	llm: {
+		apiKey: 'sk-9d7dd864e9b24418a8792818370443b5',
+		baseUrl: 'https://api.deepseek.com/v1',
+		model: 'deepseek-chat',
+	},
+};
 
 const CONTAINER_ID = 'synapse-ai-root';
 
 export default class SynapseAI extends Plugin {
 	private root: Root | null = null;
+	settings: SynapseAISettings = DEFAULT_SETTINGS;
 
 	async onload() {
+		await this.loadSettings();
+
+		this.addSettingTab(new SynapseSettingTab(this.app, this));
+
 		// 初始化服务
 		initServices(this.app);
 
@@ -27,7 +46,20 @@ export default class SynapseAI extends Plugin {
 		document.body.appendChild(container);
 
 		this.root = createRoot(container);
-		this.root.render(React.createElement(App));
+		this.root.render(React.createElement(App, { llmConfig: this.settings.llm }));
+	}
+
+	async loadSettings() {
+		const data = (await this.loadData()) as Partial<SynapseAISettings> | null;
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...data,
+			llm: { ...DEFAULT_SETTINGS.llm, ...(data?.llm ?? {}) },
+		};
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
 	}
 
 	onunload() {
