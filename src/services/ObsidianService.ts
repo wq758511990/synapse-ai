@@ -47,37 +47,46 @@ export class ObsidianService {
 
 		console.warn(`[Synapse AI] searchNotes: 共 ${files.length} 个文件, 查询: "${query}"`);
 
+		// 第一轮：只用元数据（轻量级，不读文件）
+		const unchecked: TFile[] = [];
 		for (const file of files) {
 			const cache = this.app.metadataCache.getFileCache(file);
-			const content = await this.app.vault.read(file);
-
-			// 搜索范围：文件名 + frontmatter summary + headings + tags + 笔记正文
-			const searchableText = [
+			const metaText = [
 				file.basename,
 				file.path,
 				cache?.frontmatter?.summary ?? "",
 				...(cache?.headings?.map((h) => h.heading) ?? []),
 				...(cache?.tags?.map((t) => t.tag) ?? []),
-				content,
 			].join(" ");
 
-			const match = searchFn(searchableText);
-			if (match) {
+			if (searchFn(metaText)) {
 				const tags = cache?.tags?.map((t) => t.tag) ?? [];
 				const links = cache?.links?.map((l) => l.link) ?? [];
 				const summary = (cache?.frontmatter?.summary as string) ?? null;
-
-				results.push({
-					path: file.path,
-					name: file.basename,
-					content: "",
-					tags,
-					links,
-					summary,
-				});
+				results.push({ path: file.path, name: file.basename, content: "", tags, links, summary });
+			} else {
+				unchecked.push(file);
 			}
+		}
 
-			if (results.length >= maxResults) break;
+		// 元数据已经够了，跳过全文搜索
+		if (results.length >= maxResults) {
+			return results.slice(0, maxResults);
+		}
+
+		// 第二轮：对元数据未命中的文件读全文（去掉 frontmatter 避免干扰）
+		for (const file of unchecked) {
+			const raw = await this.app.vault.read(file);
+			const body = raw.replace(/^---[\s\S]*?---\n?/, "");
+			if (searchFn(body)) {
+				const cache = this.app.metadataCache.getFileCache(file);
+				const tags = cache?.tags?.map((t) => t.tag) ?? [];
+				const links = cache?.links?.map((l) => l.link) ?? [];
+				const summary = (cache?.frontmatter?.summary as string) ?? null;
+				results.push({ path: file.path, name: file.basename, content: "", tags, links, summary });
+
+				if (results.length >= maxResults) break;
+			}
 		}
 
 		return results;
