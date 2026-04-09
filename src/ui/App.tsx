@@ -8,9 +8,8 @@ import { ChatView } from './views/ChatView';
  * 样式全部使用 CSS 变量，自动适配 Obsidian 当前主题
  */
 export const App: React.FC = () => {
-	const { isPanelVisible, activeTab, setActiveTab, togglePanel } = useSynapseStore();
+	const { isPanelVisible, togglePanel } = useSynapseStore();
 
-	// 读取 CSS 变量的辅助函数
 	const cssVar = (name: string, fallback?: string) => fallback ? `var(--${name}, ${fallback})` : `var(--${name})`;
 
 	return (
@@ -54,51 +53,7 @@ export const App: React.FC = () => {
 					fontFamily: cssVar('font-interface'),
 					fontSize: 14,
 				}}>
-					{/* 顶部 Tab 栏 */}
-					<div style={{
-						display: 'flex',
-						borderBottom: `1px solid ${cssVar('background-modifier-border')}`,
-					}}>
-						{(['chat', 'management'] as const).map((tab) => (
-							<button
-								key={tab}
-								onClick={() => setActiveTab(tab)}
-								style={{
-									flex: 1,
-									padding: '10px 0',
-									border: 'none',
-									background: 'transparent',
-									color: activeTab === tab
-										? cssVar('interactive-accent')
-										: cssVar('text-muted'),
-									borderBottom: activeTab === tab
-										? `2px solid ${cssVar('interactive-accent')}`
-										: '2px solid transparent',
-									cursor: 'pointer',
-									fontWeight: activeTab === tab ? 600 : 400,
-									fontSize: 13,
-								}}
-							>
-								{tab === 'chat' ? 'Chat' : 'Management'}
-							</button>
-						))}
-					</div>
-
-					{/* 视图渲染区 */}
-					<div style={{ flex: 1, overflow: 'auto' }}>
-						{activeTab === 'chat' && <ChatView />}
-						{activeTab === 'management' && (
-							<div style={{
-								display: 'flex',
-								alignItems: 'center',
-								justifyContent: 'center',
-								height: '100%',
-								color: cssVar('text-muted'),
-							}}>
-								Management — 敬请期待
-							</div>
-						)}
-					</div>
+					<ChatView />
 				</div>
 			)}
 		</div>

@@ -3,7 +3,6 @@ import { createRoot, Root } from 'react-dom/client';
 import React from 'react';
 import { App } from './ui/App';
 import { useSynapseStore } from './store/useSynapseStore';
-import { registerGenerateSummary } from './commands/generateSummary';
 
 const CONTAINER_ID = 'synapse-ai-root';
 
@@ -21,9 +20,6 @@ export default class SynapseAI extends Plugin {
 				void useSynapseStore.getState().refreshCurrentNote();
 			})
 		);
-
-		// 注册旧命令
-		registerGenerateSummary(this);
 
 		// 创建 React 挂载容器
 		const container = document.createElement('div');

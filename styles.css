@@ -54,3 +54,8 @@
 	border-top: 1px solid var(--background-modifier-border);
 	margin: 8px 0;
 }
+
+/* 工作流步骤 spinner 动画 */
+@keyframes synapse-spin {
+	to { transform: rotate(360deg); }
+}

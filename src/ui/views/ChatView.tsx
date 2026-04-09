@@ -1,21 +1,22 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { SendHorizontal } from 'lucide-react';
+import { SendHorizontal, ChevronDown, ChevronRight } from 'lucide-react';
 import { marked } from 'marked';
-import { useSynapseStore } from '../../store/useSynapseStore';
-import { runChatWorkflow } from '../../workflow/chatGraph';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LLMConfig } from '../../services/llmService';
+import { useSynapseStore, WorkflowStep } from '../../store/useSynapseStore';
+import { runChatWorkflow } from '../../workflow/chatGraph';
 
 const LLM_CONFIG: LLMConfig = {
 	apiKey: 'sk-9d7dd864e9b24418a8792818370443b5',
 	baseUrl: 'https://api.deepseek.com/v1',
-	model: 'deepseek-chat',
+	model: 'deepseek-reasoner',
 };
 
-/**
- * Chat 视图：消息列表 + 输入框
- */
 export const ChatView: React.FC = () => {
-	const { chatHistory, addMessage, isAiThinking, setAiThinking, currentNoteContent } = useSynapseStore();
+	const {
+		chatHistory, addMessage, isAiThinking, setAiThinking,
+		currentNoteContent, streamingContent, setStreamingContent, resetStreaming,
+		workflowSteps, addWorkflowStep, updateLastStep, completeLastStep, clearWorkflowSteps,
+	} = useSynapseStore();
 	const [input, setInput] = useState('');
 	const listRef = useRef<HTMLDivElement>(null);
 
@@ -24,7 +25,7 @@ export const ChatView: React.FC = () => {
 		if (listRef.current) {
 			listRef.current.scrollTop = listRef.current.scrollHeight;
 		}
-	}, [chatHistory, isAiThinking]);
+	}, [chatHistory, isAiThinking, streamingContent, workflowSteps]);
 
 	const cssVar = (name: string, fallback?: string) => fallback ? `var(--${name}, ${fallback})` : `var(--${name})`;
 
@@ -35,15 +36,32 @@ export const ChatView: React.FC = () => {
 		setInput('');
 		addMessage({ role: 'user', content: text });
 		setAiThinking(true);
+		resetStreaming();
+		clearWorkflowSteps();
 
 		try {
-			const result = await runChatWorkflow(LLM_CONFIG, {
+			const { obsidian } = useSynapseStore.getState();
+			if (!obsidian) throw new Error('ObsidianService 未初始化');
+
+			let accumulated = '';
+			const result = await runChatWorkflow(LLM_CONFIG, obsidian, {
 				userInput: text,
 				chatHistory,
 				currentNoteContent,
+			}, {
+				onToken: (token) => {
+					accumulated += token;
+					setStreamingContent(accumulated);
+				},
+				onStepStart: (label) => addWorkflowStep(label),
+				onStepDetail: (detail) => updateLastStep(detail),
+				onStepDone: () => completeLastStep(),
 			});
+
+			resetStreaming();
 			addMessage({ role: 'assistant', content: result.aiResponse || '（无响应）' });
 		} catch (error: unknown) {
+			resetStreaming();
 			const msg = error instanceof Error ? error.message : '未知错误';
 			addMessage({ role: 'assistant', content: `请求失败: ${msg}` });
 		} finally {
@@ -54,7 +72,7 @@ export const ChatView: React.FC = () => {
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
-			handleSend();
+			void handleSend();
 		}
 	};
 
@@ -62,7 +80,7 @@ export const ChatView: React.FC = () => {
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%', userSelect: 'text' }}>
 			{/* 消息列表 */}
 			<div ref={listRef} style={{ flex: 1, overflow: 'auto', padding: 12, userSelect: 'text' }}>
-				{chatHistory.length === 0 && (
+				{chatHistory.length === 0 && !isAiThinking && (
 					<div style={{
 						textAlign: 'center',
 						color: cssVar('text-muted'),
@@ -95,9 +113,20 @@ export const ChatView: React.FC = () => {
 						)}
 					</div>
 				))}
-				{isAiThinking && (
-					<div style={{ color: cssVar('text-muted'), padding: '4px 0' }}>
-						Synapse AI 正在思考...
+
+				{/* 工作流步骤 */}
+				{workflowSteps.length > 0 && (
+					<div style={{ marginBottom: 8 }}>
+						{workflowSteps.map((step, i) => (
+							<WorkflowStepItem key={i} step={step} cssVar={cssVar} />
+						))}
+					</div>
+				)}
+
+				{/* 流式输出中的 AI 回复 */}
+				{streamingContent && (
+					<div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+						<AssistantMessage content={streamingContent} cssVar={cssVar} />
 					</div>
 				)}
 			</div>
@@ -126,7 +155,7 @@ export const ChatView: React.FC = () => {
 					}}
 				/>
 				<button
-					onClick={handleSend}
+					onClick={() => void handleSend()}
 					disabled={isAiThinking || !input.trim()}
 					style={{
 						padding: '8px 10px',
@@ -143,6 +172,72 @@ export const ChatView: React.FC = () => {
 					<SendHorizontal size={16} />
 				</button>
 			</div>
+		</div>
+	);
+};
+
+/**
+ * 工作流步骤项：运行中展开显示 detail，完成后折叠
+ */
+const WorkflowStepItem: React.FC<{ step: WorkflowStep; cssVar: (n: string, f?: string) => string }> = ({ step, cssVar }) => {
+	const [expanded, setExpanded] = useState(step.status === 'running');
+
+	useEffect(() => {
+		if (step.status === 'done') {
+			setExpanded(false);
+		}
+	}, [step.status]);
+
+	const isRunning = step.status === 'running';
+
+	return (
+		<div style={{
+			fontSize: 12,
+			color: cssVar('text-muted'),
+			marginBottom: 2,
+		}}>
+			<div
+				onClick={() => step.detail ? setExpanded(!expanded) : undefined}
+				style={{
+					display: 'flex',
+					alignItems: 'center',
+					gap: 4,
+					cursor: step.detail ? 'pointer' : 'default',
+					padding: '2px 0',
+				}}
+			>
+				{step.detail ? (
+					expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+				) : (
+					<span style={{ width: 12 }} />
+				)}
+				{isRunning && <span className="synapse-step-spinner" style={{
+					display: 'inline-block',
+					width: 8,
+					height: 8,
+					border: `1.5px solid ${cssVar('text-muted')}`,
+					borderRightColor: 'transparent',
+					borderRadius: '50%',
+					animation: 'synapse-spin 0.8s linear infinite',
+				}} />}
+				<span>{step.label}</span>
+			</div>
+			{expanded && step.detail && (
+				<div style={{
+					marginLeft: 16,
+					padding: '4px 8px',
+					background: cssVar('background-secondary'),
+					borderRadius: 6,
+					fontSize: 11,
+					lineHeight: 1.5,
+					whiteSpace: 'pre-wrap',
+					wordBreak: 'break-word',
+					maxHeight: 120,
+					overflow: 'auto',
+				}}>
+					{step.detail}
+				</div>
+			)}
 		</div>
 	);
 };
